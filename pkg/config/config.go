@@ -112,6 +112,26 @@ type Registry struct {
 	PrefixDuplicateProfiles bool   `toml:"prefixDuplicateProfiles,omitempty"`
 	PrefixAllProfiles       bool   `toml:"prefixAllProfiles,omitempty"`
 	Type                    string `toml:"type,omitempty"`
+	// SSORoleFilter configures automatic subfolder discovery based on AWS SSO roles.
+	// When set, the registry will enumerate subfolders in the repository and only sync
+	// those that match customer names extracted from the user's available SSO roles.
+	SSORoleFilter *SSOFolderFilter `toml:"ssoRoleFilter,omitempty"`
+}
+
+// SSOFolderFilter configures automatic subfolder discovery based on AWS SSO roles.
+// It extracts customer names from role names using a regex pattern and syncs only
+// the subfolders that match those customer names.
+type SSOFolderFilter struct {
+	// SSOStartURL is the AWS SSO start URL to query roles from (e.g., https://example.awsapps.com/start)
+	SSOStartURL string `toml:"ssoStartURL"`
+	// SSORegion is the AWS region where SSO is configured (e.g., us-east-1)
+	SSORegion string `toml:"ssoRegion"`
+	// RolePattern is a regex pattern with a capture group to extract the customer name from role names.
+	// For example, "^Support(.+)$" would extract "Google" from "SupportGoogle".
+	// The first capture group is used as the customer name.
+	RolePattern string `toml:"rolePattern"`
+	// SSOScopes optionally specifies SSO scopes to use during authentication.
+	SSOScopes []string `toml:"ssoScopes,omitempty"`
 }
 
 type AWSSSOConfiguration struct {
