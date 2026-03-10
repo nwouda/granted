@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/common-fate/clio"
 	grantedConfig "github.com/fwdcloudsec/granted/pkg/config"
@@ -138,12 +139,12 @@ func matchCustomerFolders(customerNames []string, availableFolders []string) []s
 	// Create a map of lowercase folder names to original folder names
 	folderMap := make(map[string]string)
 	for _, folder := range availableFolders {
-		folderMap[toLower(folder)] = folder
+		folderMap[strings.ToLower(folder)] = folder
 	}
 
 	var matched []string
 	for _, customer := range customerNames {
-		if folder, ok := folderMap[toLower(customer)]; ok {
+		if folder, ok := folderMap[strings.ToLower(customer)]; ok {
 			matched = append(matched, folder)
 		} else {
 			clio.Debugf("Customer '%s' from SSO roles has no matching folder in repository", customer)
@@ -151,18 +152,4 @@ func matchCustomerFolders(customerNames []string, availableFolders []string) []s
 	}
 
 	return matched
-}
-
-// toLower converts a string to lowercase
-func toLower(s string) string {
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			result[i] = c + 32
-		} else {
-			result[i] = c
-		}
-	}
-	return string(result)
 }

@@ -130,27 +130,6 @@ func TestMatchCustomerFolders(t *testing.T) {
 	}
 }
 
-func TestToLower(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"Hello", "hello"},
-		{"UPPERCASE", "uppercase"},
-		{"lowercase", "lowercase"},
-		{"MiXeD CaSe", "mixed case"},
-		{"", ""},
-		{"123ABC", "123abc"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := toLower(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestIsSSOLoginRequiredError(t *testing.T) {
 	tests := []struct {
 		name     string
