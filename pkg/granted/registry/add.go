@@ -10,6 +10,7 @@ import (
 	"github.com/fwdcloudsec/granted/pkg/granted/awsmerge"
 	"github.com/fwdcloudsec/granted/pkg/granted/registry/gitregistry"
 	"github.com/fwdcloudsec/granted/pkg/testable"
+	"gopkg.in/ini.v1"
 
 	"github.com/urfave/cli/v2"
 )
@@ -34,7 +35,13 @@ var AddCommand = cli.Command{
 		&cli.BoolFlag{Name: "prefix-duplicate-profiles", Aliases: []string{"pdp"}, Usage: "Provide this flag if you want to append registry name to duplicate profiles"},
 		&cli.BoolFlag{Name: "write-on-sync-failure", Aliases: []string{"wosf"}, Usage: "Always overwrite AWS config, even if sync fails (DEPRECATED)"},
 		&cli.StringSliceFlag{Name: "required-key", Aliases: []string{"r", "requiredKey"}, Usage: "Used to bypass the prompt or override user specific values"},
-		&cli.StringFlag{Name: "type", Value: "git", Usage: "specify the type of granted registry source you want to set up. Default: git"}},
+		&cli.StringFlag{Name: "type", Value: "git", Usage: "specify the type of granted registry source you want to set up. Default: git"},
+		// SSO role filter flags for automatic subfolder discovery
+		&cli.StringFlag{Name: "sso-start-url", Usage: "SSO start URL for automatic subfolder discovery based on SSO roles"},
+		&cli.StringFlag{Name: "sso-region", Usage: "SSO region for automatic subfolder discovery based on SSO roles"},
+		&cli.StringFlag{Name: "sso-role-pattern", Usage: "Regex pattern with capture group to extract customer name from role names (e.g., '^Support(.+)$')"},
+		&cli.StringSliceFlag{Name: "sso-scope", Usage: "SSO scopes for authentication (optional)"},
+	},
 
 	ArgsUsage: "--name <registry_name> --url <repository_url> --type <registry_type>",
 	Action: func(c *cli.Context) error {
@@ -60,12 +67,24 @@ var AddCommand = cli.Command{
 		priority := c.Int("priority")
 		registryType := c.String("type")
 
+		// SSO role filter options
+		ssoStartURL := c.String("sso-start-url")
+		ssoRegion := c.String("sso-region")
+		ssoRolePattern := c.String("sso-role-pattern")
+		ssoScopes := c.StringSlice("sso-scope")
+
 		if registryType == "http" {
 			return fmt.Errorf("HTTP registries are not longer supported in this version of Granted: if you are impacted by this please raise an issue: https://github.com/fwdcloudsec/granted/issues/new")
 		}
 
 		if registryType != "git" {
 			return fmt.Errorf("invalid registry type provided: %s. must be 'git'", c.String("type"))
+		}
+
+		// Validate SSO filter flags - all three must be provided together
+		if (ssoStartURL != "" || ssoRegion != "" || ssoRolePattern != "") &&
+			(ssoStartURL == "" || ssoRegion == "" || ssoRolePattern == "") {
+			return fmt.Errorf("when using SSO role filtering, all of --sso-start-url, --sso-region, and --sso-role-pattern must be provided")
 		}
 
 		for _, r := range gConf.ProfileRegistry.Registries {
@@ -88,22 +107,45 @@ var AddCommand = cli.Command{
 			Type:                    registryType,
 		}
 
-		registry, err := gitregistry.New(gitregistry.Opts{
-			Name:         name,
-			URL:          URL,
-			Path:         pathFlag,
-			Filename:     configFileName,
-			Ref:          ref,
-			RequiredKeys: requiredKey,
-			Interactive:  true,
-		})
-
-		if err != nil {
-			return err
+		// Add SSO role filter if configured
+		if ssoStartURL != "" {
+			registryConfig.SSORoleFilter = &grantedConfig.SSOFolderFilter{
+				SSOStartURL: ssoStartURL,
+				SSORegion:   ssoRegion,
+				RolePattern: ssoRolePattern,
+				SSOScopes:   ssoScopes,
+			}
 		}
-		src, err := registry.AWSProfiles(ctx, true)
-		if err != nil {
-			return err
+
+		var src *ini.File
+
+		// Use SSO filtered registry if SSO filter is configured
+		if registryConfig.SSORoleFilter != nil {
+			reg, err := createSSOFilteredRegistry(ctx, registryConfig, true)
+			if err != nil {
+				return err
+			}
+			src, err = reg.AWSProfiles(ctx, true)
+			if err != nil {
+				return err
+			}
+		} else {
+			gitReg, err := gitregistry.New(gitregistry.Opts{
+				Name:         name,
+				URL:          URL,
+				Path:         pathFlag,
+				Filename:     configFileName,
+				Ref:          ref,
+				RequiredKeys: requiredKey,
+				Interactive:  true,
+			})
+			if err != nil {
+				return err
+			}
+			src, err = gitReg.AWSProfiles(ctx, true)
+			if err != nil {
+				return err
+			}
 		}
 
 		dst, filepath, err := loadAWSConfigFile()
